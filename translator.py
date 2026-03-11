@@ -19,7 +19,7 @@ MAX_CHUNK_CHARS = 1000
 TRANSLATION_MODE = "aws"
 
 # HuggingFace Inference API endpoint for NLLB
-HF_API_URL = "https://router.huggingface.co/models/facebook/nllb-200-distilled-600M"
+HF_API_URL = "https://api-inference.huggingface.co/models/facebook/nllb-200-distilled-600M"
 
 # Language code mapping for NLLB-200
 LANGUAGE_CODES = {
@@ -195,15 +195,21 @@ def _translate_via_hf(text: str, target_lang: str = "fra_Latn") -> str:
 
 def _translate_with_fallback(text: str, target_lang: str = "French") -> str:
     """
-    Translate using only gpt-oss-model-120b via AWS Bedrock.
-    No fallback to other models.
+    Translate using AWS Bedrock first, then fallback to HuggingFace NLLB.
     """
-    # Use only AWS Bedrock with gpt-oss-model-120b
+    # Try AWS Bedrock first
     translated = _translate_via_aws_bedrock(text, target_lang)
     if translated:
         return translated
     
-    # If translation fails, return original text with language indicator
+    # Fallback to HuggingFace NLLB if AWS fails
+    print(f"AWS translation failed, trying HuggingFace NLLB...")
+    lang_code = get_language_code(target_lang)
+    translated = _translate_via_hf(text, lang_code)
+    if translated:
+        return translated
+    
+    # If all translation fails, return original text with language indicator
     print(f"Translation failed for: {text[:50]}...")
     return f"[{target_lang}] {text}"
 
