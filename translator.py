@@ -21,7 +21,7 @@ TRANSLATION_MODE = "aws"
 # HuggingFace Inference API endpoint for NLLB
 HF_API_URL = "https://api-inference.huggingface.co/models/facebook/nllb-200-distilled-600M"
 
-# Language code mapping for NLLB-200
+# Language code mapping for gpt-oss-model-120b-1:0
 LANGUAGE_CODES = {
     "French": "fra_Latn",
     "German": "deu_Latn",
@@ -146,36 +146,39 @@ def _translate_via_hf(text: str, target_lang: str = "fra_Latn") -> str:
     Returns:
         Translated text
     """
+    if not HF_API_TOKEN:
+        print("HF API token not configured")
+        return None
+    
     headers = {
         "Authorization": f"Bearer {HF_API_TOKEN}",
         "Content-Type": "application/json"
     }
     
+    # NLLB-200 API format - simpler payload
     payload = {
         "inputs": text,
-        "parameters": {
-            "src_lang": "eng_Latn",
-            "tgt_lang": target_lang,
-            "task": "translation"
-        },
-        "options": {
-            "use_cache": False
-        }
+        "target_lang": target_lang,
+        "source_lang": "eng_Latn"
     }
     
     try:
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=60)
+        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=120)
+        
+        print(f"HF API response status: {response.status_code}")
         
         if response.status_code != 200:
-            print(f"HF API error: {response.status_code} - {response.text[:200]}")
+            print(f"HF API error: {response.status_code} - {response.text[:500]}")
             return None
         
         result = response.json()
+        print(f"HF API result type: {type(result)}")
         
         # Handle different response formats from HF API
         if isinstance(result, list) and len(result) > 0:
             if isinstance(result[0], dict) and 'translation_text' in result[0]:
                 translated = result[0]['translation_text']
+                print(f"HF translation: {translated[:100]}...")
                 if translated.lower().strip() != text.lower().strip():
                     return translated
                 return None
@@ -183,13 +186,15 @@ def _translate_via_hf(text: str, target_lang: str = "fra_Latn") -> str:
                 return result[0]
         if isinstance(result, dict) and 'translation_text' in result:
             translated = result['translation_text']
+            print(f"HF translation: {translated[:100]}...")
             if translated.lower().strip() != text.lower().strip():
                 return translated
             return None
         
+        print(f"HF unexpected result format: {result}")
         return None
     except Exception as e:
-        print(f"Translation exception: {str(e)}")
+        print(f"HF Translation exception: {str(e)}")
         return None
 
 
