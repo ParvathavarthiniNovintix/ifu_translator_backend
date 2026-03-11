@@ -29,4 +29,4 @@ transformers
 # Utilities
 sentencepiece
 protobuf
-request
+requests
