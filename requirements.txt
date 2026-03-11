@@ -3,9 +3,6 @@ fastapi
 uvicorn
 python-multipart
 
-# CORS
-starlette
-
 # Data validation
 pydantic
 
@@ -14,7 +11,6 @@ python-dotenv
 
 # PDF handling
 PyMuPDF
-fpdf2
 
 # DOCX handling
 python-docx
@@ -22,11 +18,8 @@ python-docx
 # Excel handling
 openpyxl
 
-# Deep Learning / Translation
-torch
-transformers
+# AWS Bedrock translation
+boto3
 
-# Utilities
-sentencepiece
-protobuf
+# HTTP requests
 requests
