@@ -61,7 +61,7 @@ AWS_MODEL_ID = "openai.gpt-oss-120b-1:0"
 
 def get_language_code(language_name: str) -> str:
     """Get the language code for a given language name."""
-    return LANGUAGE_CODES.get(language_name, "fra_Latn")
+    return LANGUAGE_CODES.get(language_name, "fr")
 
 
 def _translate_via_aws_bedrock(text: str, target_lang: str = "French") -> str:
@@ -87,8 +87,18 @@ def _translate_via_aws_bedrock(text: str, target_lang: str = "French") -> str:
         # Get language code for the target language
         lang_code = get_language_code(target_lang)
         
-        # Direct translation prompt - simple and clear
-        prompt = f"Translate to {target_lang} ({lang_code}): {text}"
+        # Improved translation prompt - very explicit
+        prompt = f"""Task: Translate the following medical document text from English to {target_lang}.
+
+IMPORTANT: 
+- You MUST translate the text, do NOT copy it
+- Output ONLY the {target_lang} translation, nothing else
+- Do NOT include any explanations, notes, or original text
+
+Text to translate:
+{text}
+
+{target_lang} translation:"""
         
         print(f"=== AWS TRANSLATION DEBUG ===")
         print(f"Model: {AWS_MODEL_ID}")
