@@ -103,6 +103,11 @@ async def translate_segments_endpoint(
     Translate DOCX segments to target language.
     This is the main endpoint for the IFU translation workflow.
     """
+    import sys
+    print(f"=== TRANSLATION REQUEST ===", flush=True)
+    print(f"Target language: {target_lang}", flush=True)
+    sys.stdout.flush()
+    
     docx_bytes = await file.read()
     
     try:

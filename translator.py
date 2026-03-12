@@ -1,6 +1,5 @@
 import os
 import json
-import requests
 import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
@@ -8,33 +7,52 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Get API tokens from environment
-HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
 
 MAX_CHUNK_CHARS = 1000
 
-# Translation mode: only AWS (gpt-oss-model-120b)
-TRANSLATION_MODE = "aws"
-
-# HuggingFace Inference API endpoint for NLLB
-HF_API_URL = "https://api-inference.huggingface.co/models/facebook/nllb-200-distilled-600M"
-
 # Language code mapping for gpt-oss-model-120b-1:0
 LANGUAGE_CODES = {
-    "French": "fra_Latn",
-    "German": "deu_Latn",
-    "Spanish": "spa_Latn",
-    "Japanese": "jpn_Jpan",
-    "Chinese": "zho_Hans",
-    "Korean": "kor_Hang",
-    "Portuguese": "por_Latn",
-    "Italian": "ita_Latn",
-    "Russian": "rus_Cyrl",
-    "Arabic": "arb_Arab",
-    "Dutch": "nld_Latn",
-    "Finnish": "fin_Latn",
+    "English": "en",
+    "Polish": "pl",
+    "Bulgarian": "bg",
+    "Portuguese": "pt",
+    "Czech": "cs",
+    "Romanian": "ro",
+    "Danish": "da",
+    "Russian": "ru",
+    "German": "de",
+    "Slovak": "sk",
+    "Greek": "el",
+    "Slovenian": "sl",
+    "Spanish": "es",
+    "Serbian": "sr",
+    "Estonian": "et",
+    "Swedish": "sv",
+    "Finnish": "fi",
+    "Turkish": "tr",
+    "French": "fr",
+    "Vietnamese": "vi",
+    "Croatian": "hr",
+    "Irish": "ga",
+    "Hungarian": "hu",
+    "Maltese": "mt",
+    "Indonesian": "id",
+    "Italian": "it",
+    "Icelandic": "is",
+    "Chinese": "zh",
+    "Kazakh": "kk",
+    "Lithuanian": "lt",
+    "Latvian": "lv",
+    "Japanese": "ja",
+    "Dutch": "nl",
+    "Korean": "ko",
+    "Norwegian": "no",
+    "Thai": "th",
+    "Arabic": "ar",
+    "Malay": "ms",
 }
 
 # AWS Bedrock model configuration - gpt-oss-model-120b only
@@ -42,7 +60,7 @@ AWS_MODEL_ID = "openai.gpt-oss-120b-1:0"
 
 
 def get_language_code(language_name: str) -> str:
-    """Get the NLLB-200 language code for a given language name."""
+    """Get the language code for a given language name."""
     return LANGUAGE_CODES.get(language_name, "fra_Latn")
 
 
@@ -66,13 +84,17 @@ def _translate_via_aws_bedrock(text: str, target_lang: str = "French") -> str:
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY
         )
 
-        # Prepare the prompt for translation using chat format
-        prompt = f"""Translate the following English text to {target_lang}. 
-Only provide the translation, nothing else.
-
-English: {text}
-
-{target_lang}:"""
+        # Get language code for the target language
+        lang_code = get_language_code(target_lang)
+        
+        # Direct translation prompt - simple and clear
+        prompt = f"Translate to {target_lang} ({lang_code}): {text}"
+        
+        print(f"=== AWS TRANSLATION DEBUG ===")
+        print(f"Model: {AWS_MODEL_ID}")
+        print(f"Region: {AWS_REGION}")
+        print(f"Target: {target_lang} ({lang_code})")
+        print(f"Input text: {text[:100]}...")
 
         # Request payload for OpenAI model on Bedrock (chat format)
         payload = {
@@ -88,24 +110,37 @@ English: {text}
         }
 
         # Invoke the model
+        print("Invoking AWS Bedrock...")
         response = bedrock_runtime.invoke_model(
             modelId=AWS_MODEL_ID,
             contentType="application/json",
             accept="application/json",
             body=json.dumps(payload)
         )
+        
+        print(f"Response received, status: OK")
 
         # Parse the response
         response_body = json.loads(response['body'].read())
+        
+        print(f"AWS Response keys: {response_body.keys()}")
+        print(f"Full response: {json.dumps(response_body)[:500]}...")
         
         # Extract the translated text from the response
         # OpenAI format returns 'choices' array with 'message' object
         if 'choices' in response_body and len(response_body['choices']) > 0:
             translated_text = response_body['choices'][0].get('message', {}).get('content', '')
             translated_text = translated_text.strip()
-        else:
+        elif 'completion' in response_body:
             # Fallback: check other possible response formats
             translated_text = response_body.get('completion', '').strip()
+        elif 'text' in response_body:
+            translated_text = response_body.get('text', '').strip()
+        else:
+            print(f"Unexpected response format: {response_body}")
+            return None
+        
+        print(f"Raw translation: {translated_text[:200]}...")
         
         # Clean up reasoning/thinking tags if present
         import re
@@ -117,14 +152,29 @@ English: {text}
         translated_text = re.sub(r'<[^>]+>', '', translated_text)
         translated_text = translated_text.strip()
         
-        # Clean up the response - remove the prompt if echoed back
-        if translated_text.startswith(text):
-            translated_text = translated_text[len(text):].strip()
+        # Check if the response is just the original English text (model didn't translate)
+        if translated_text.lower() == text.lower():
+            print("ERROR: Model returned original text without translation!")
+            return None
         
-        # Remove any trailing markers
-        if f"{target_lang}:" in translated_text:
-            translated_text = translated_text.split(f"{target_lang}:")[-1].strip()
-            
+        # If the response starts with the input text, remove it
+        if text.lower() in translated_text.lower() and len(translated_text) > len(text) * 1.5:
+            # Find where the actual translation starts
+            lines = translated_text.split('\n')
+            if len(lines) > 1:
+                # Skip the first line if it contains English
+                for i, line in enumerate(lines):
+                    if line.strip().lower() != text.lower():
+                        translated_text = '\n'.join(lines[i:])
+                        break
+        
+        # Remove the target language label if present at the start
+        for prefix in [f"{target_lang}:", f"{target_lang} translation:", f"{lang_code}:"]:
+            if translated_text.lower().startswith(prefix.lower()):
+                translated_text = translated_text[len(prefix):].strip()
+                break
+              
+        print(f"Final translation: {translated_text[:200]}...")
         return translated_text if translated_text else None
 
     except ClientError as e:
@@ -132,91 +182,32 @@ English: {text}
         return None
     except Exception as e:
         print(f"Translation exception: {str(e)}")
-        return None
-
-
-def _translate_via_hf(text: str, target_lang: str = "fra_Latn") -> str:
-    """
-    Translate text using HuggingFace Inference API.
-    
-    Args:
-        text: English text to translate
-        target_lang: Target language code (e.g., "fra_Latn", "deu_Latn")
-    
-    Returns:
-        Translated text
-    """
-    if not HF_API_TOKEN:
-        print("HF API token not configured")
-        return None
-    
-    headers = {
-        "Authorization": f"Bearer {HF_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    
-    # NLLB-200 API format - simpler payload
-    payload = {
-        "inputs": text,
-        "target_lang": target_lang,
-        "source_lang": "eng_Latn"
-    }
-    
-    try:
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=120)
-        
-        print(f"HF API response status: {response.status_code}")
-        
-        if response.status_code != 200:
-            print(f"HF API error: {response.status_code} - {response.text[:500]}")
-            return None
-        
-        result = response.json()
-        print(f"HF API result type: {type(result)}")
-        
-        # Handle different response formats from HF API
-        if isinstance(result, list) and len(result) > 0:
-            if isinstance(result[0], dict) and 'translation_text' in result[0]:
-                translated = result[0]['translation_text']
-                print(f"HF translation: {translated[:100]}...")
-                if translated.lower().strip() != text.lower().strip():
-                    return translated
-                return None
-            elif isinstance(result[0], str):
-                return result[0]
-        if isinstance(result, dict) and 'translation_text' in result:
-            translated = result['translation_text']
-            print(f"HF translation: {translated[:100]}...")
-            if translated.lower().strip() != text.lower().strip():
-                return translated
-            return None
-        
-        print(f"HF unexpected result format: {result}")
-        return None
-    except Exception as e:
-        print(f"HF Translation exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
 def _translate_with_fallback(text: str, target_lang: str = "French") -> str:
     """
-    Translate using AWS Bedrock first, then fallback to HuggingFace NLLB.
+    Translate using AWS Bedrock gpt-oss-120b model.
+    Returns the translated text or raises an exception on failure.
     """
-    # Try AWS Bedrock first
+    import sys
+    
+    # Try AWS Bedrock
+    print(f"=== AWS TRANSLATION DEBUG ===", flush=True)
+    print(f"Translating to {target_lang}...", flush=True)
+    sys.stdout.flush()
+    
     translated = _translate_via_aws_bedrock(text, target_lang)
+    
     if translated:
+        print(f"AWS translation successful: {translated[:100]}...", flush=True)
         return translated
     
-    # Fallback to HuggingFace NLLB if AWS fails
-    print(f"AWS translation failed, trying HuggingFace NLLB...")
-    lang_code = get_language_code(target_lang)
-    translated = _translate_via_hf(text, lang_code)
-    if translated:
-        return translated
-    
-    # If all translation fails, return original text with language indicator
-    print(f"Translation failed for: {text[:50]}...")
-    return f"[{target_lang}] {text}"
+    # Translation failed - raise exception so we can see what's happening
+    print(f"AWS translation FAILED for text: {text[:50]}...", flush=True)
+    raise Exception(f"AWS translation failed! Target: {target_lang}, Input: {text[:100]}...")
 
 
 def _chunk_text(text: str) -> list[str]:
@@ -241,12 +232,20 @@ def translate_chunks(text: str, target_lang: str = "French"):
     total = len(chunks)
     for i, chunk in enumerate(chunks):
         translated = _translate_with_fallback(chunk, target_lang)
+        
+        # If translation failed, raise an error so the user knows
+        if translated is None:
+            raise Exception(f"Translation to {target_lang} failed. Please check AWS credentials and model availability.")
+        
         yield translated, i + 1, total
 
 
 def translate_text(text: str, target_lang: str = "French") -> str:
     """Translate English text to target language using available translation API."""
-    return " ".join(chunk for chunk, _, _ in translate_chunks(text, target_lang))
+    result_chunks = []
+    for chunk, _, _ in translate_chunks(text, target_lang):
+        result_chunks.append(chunk)
+    return " ".join(result_chunks)
 
 
 def translate_segments(segments: list[dict], target_lang: str = "French"):
@@ -272,6 +271,11 @@ def translate_segments(segments: list[dict], target_lang: str = "French"):
         
         for chunk in chunks:
             translated = _translate_with_fallback(chunk, target_lang)
+            
+            # If translation failed, raise an exception
+            if translated is None:
+                raise Exception(f"Translation to {target_lang} failed. Please check AWS credentials and model availability.")
+            
             translated_parts.append(translated)
         
         yield {
