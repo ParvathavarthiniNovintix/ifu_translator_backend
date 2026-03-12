@@ -123,7 +123,9 @@ def _translate_via_aws_bedrock(text: str, target_lang: str = "French") -> str:
         # Parse the response
         response_body = json.loads(response['body'].read())
         
-        print(f"AWS Response keys: {response_body.keys()}")
+        print(f"=== AWS RESPONSE ===", flush=True)
+        print(f"Response keys: {response_body.keys()}", flush=True)
+        print(f"Full response: {json.dumps(response_body)[:1000]}", flush=True)
         print(f"Full response: {json.dumps(response_body)[:500]}...")
         
         # Extract the translated text from the response
