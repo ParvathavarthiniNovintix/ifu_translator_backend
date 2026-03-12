@@ -193,6 +193,7 @@ def _translate_with_fallback(text: str, target_lang: str = "French") -> str:
     Returns the translated text or raises an exception on failure.
     """
     import sys
+
     
     # Try AWS Bedrock
     print(f"=== AWS TRANSLATION DEBUG ===", flush=True)
