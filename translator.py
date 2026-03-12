@@ -11,57 +11,85 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
 
+print(AWS_ACCESS_KEY_ID, "This is the AAWS access key -------------------")
+
 MAX_CHUNK_CHARS = 1000
 
 # Language code mapping for gpt-oss-model-120b-1:0
+# Supports both full names and 2-letter codes
 LANGUAGE_CODES = {
-    "English": "en",
-    "Polish": "pl",
-    "Bulgarian": "bg",
-    "Portuguese": "pt",
-    "Czech": "cs",
-    "Romanian": "ro",
-    "Danish": "da",
-    "Russian": "ru",
-    "German": "de",
-    "Slovak": "sk",
-    "Greek": "el",
-    "Slovenian": "sl",
-    "Spanish": "es",
-    "Serbian": "sr",
-    "Estonian": "et",
-    "Swedish": "sv",
-    "Finnish": "fi",
-    "Turkish": "tr",
-    "French": "fr",
-    "Vietnamese": "vi",
-    "Croatian": "hr",
-    "Irish": "ga",
-    "Hungarian": "hu",
-    "Maltese": "mt",
-    "Indonesian": "id",
-    "Italian": "it",
-    "Icelandic": "is",
-    "Chinese": "zh",
-    "Kazakh": "kk",
-    "Lithuanian": "lt",
-    "Latvian": "lv",
-    "Japanese": "ja",
-    "Dutch": "nl",
-    "Korean": "ko",
-    "Norwegian": "no",
-    "Thai": "th",
-    "Arabic": "ar",
-    "Malay": "ms",
+    "English": "en", "en": "en",
+    "Polish": "pl", "pl": "pl",
+    "Bulgarian": "bg", "bg": "bg",
+    "Portuguese": "pt", "pt": "pt",
+    "Czech": "cs", "cs": "cs",
+    "Romanian": "ro", "ro": "ro",
+    "Danish": "da", "da": "da",
+    "Russian": "ru", "ru": "ru",
+    "German": "de", "de": "de",
+    "Slovak": "sk", "sk": "sk",
+    "Greek": "el", "el": "el",
+    "Slovenian": "sl", "sl": "sl",
+    "Spanish": "es", "es": "es",
+    "Serbian": "sr", "sr": "sr",
+    "Estonian": "et", "et": "et",
+    "Swedish": "sv", "sv": "sv",
+    "Finnish": "fi", "fi": "fi",
+    "Turkish": "tr", "tr": "tr",
+    "French": "fr", "fr": "fr",
+    "Vietnamese": "vi", "vi": "vi",
+    "Croatian": "hr", "hr": "hr",
+    "Irish": "ga", "ga": "ga",
+    "Hungarian": "hu", "hu": "hu",
+    "Maltese": "mt", "mt": "mt",
+    "Indonesian": "id", "id": "id",
+    "Italian": "it", "it": "it",
+    "Icelandic": "is", "is": "is",
+    "Chinese": "zh", "zh": "zh",
+    "Kazakh": "kk", "kk": "kk",
+    "Lithuanian": "lt", "lt": "lt",
+    "Latvian": "lv", "lv": "lv",
+    "Japanese": "ja", "ja": "ja",
+    "Dutch": "nl", "nl": "nl",
+    "Korean": "ko", "ko": "ko",
+    "Norwegian": "no", "no": "no",
+    "Thai": "th", "th": "th",
+    "Arabic": "ar", "ar": "ar",
+    "Malay": "ms", "ms": "ms",
 }
 
 # AWS Bedrock model configuration - gpt-oss-model-120b only
 AWS_MODEL_ID = "openai.gpt-oss-120b-1:0"
 
 
-def get_language_code(language_name: str) -> str:
-    """Get the language code for a given language name."""
-    return LANGUAGE_CODES.get(language_name, "fr")
+# Map 2-letter codes to full names for the translation prompt
+LANGUAGE_NAMES = {
+    "en": "English", "pl": "Polish", "bg": "Bulgarian", "pt": "Portuguese",
+    "cs": "Czech", "ro": "Romanian", "da": "Danish", "ru": "Russian",
+    "de": "German", "sk": "Slovak", "el": "Greek", "sl": "Slovenian",
+    "es": "Spanish", "sr": "Serbian", "et": "Estonian", "sv": "Swedish",
+    "fi": "Finnish", "tr": "Turkish", "fr": "French", "vi": "Vietnamese",
+    "hr": "Croatian", "ga": "Irish", "hu": "Hungarian", "mt": "Maltese",
+    "id": "Indonesian", "it": "Italian", "is": "Icelandic", "zh": "Chinese",
+    "kk": "Kazakh", "lt": "Lithuanian", "lv": "Latvian", "ja": "Japanese",
+    "nl": "Dutch", "ko": "Korean", "no": "Norwegian", "th": "Thai",
+    "ar": "Arabic", "ms": "Malay"
+}
+
+def get_language_code(code_or_name: str) -> str:
+    """Get the language code for a given language name or code."""
+    # Direct lookup - if it's already a 2-letter code, return it
+    if len(code_or_name) == 2:
+        return code_or_name
+    return LANGUAGE_CODES.get(code_or_name, code_or_name)
+
+
+def get_language_name(code_or_name: str) -> str:
+    """Get full language name from code or return as-is if already a name."""
+    # If it's a 2-letter code, get the full name
+    if len(code_or_name) == 2:
+        return LANGUAGE_NAMES.get(code_or_name, code_or_name.title())
+    return code_or_name
 
 
 def _translate_via_aws_bedrock(text: str, target_lang: str = "French") -> str:
@@ -84,21 +112,22 @@ def _translate_via_aws_bedrock(text: str, target_lang: str = "French") -> str:
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY
         )
 
-        # Get language code for the target language
+        # Get language code and full name for the target language
         lang_code = get_language_code(target_lang)
+        lang_name = get_language_name(target_lang)
         
         # Improved translation prompt - very explicit
-        prompt = f"""Task: Translate the following medical document text from English to {target_lang}.
+        prompt = f"""Task: Translate the following medical document text from English to {lang_name}.
 
 IMPORTANT: 
 - You MUST translate the text, do NOT copy it
-- Output ONLY the {target_lang} translation, nothing else
+- Output ONLY the {lang_name} translation, nothing else
 - Do NOT include any explanations, notes, or original text
 
 Text to translate:
 {text}
 
-{target_lang} translation:"""
+{lang_name} translation:"""
         
         print(f"=== AWS TRANSLATION DEBUG ===")
         print(f"Model: {AWS_MODEL_ID}")
@@ -164,9 +193,9 @@ Text to translate:
         translated_text = re.sub(r'<[^>]+>', '', translated_text)
         translated_text = translated_text.strip()
         
-        # Check if the response is just the original English text (model didn't translate)
-        if translated_text.lower() == text.lower():
-            print("ERROR: Model returned original text without translation!")
+        # Check if the response is empty
+        if not translated_text:
+            print("ERROR: Model returned empty translation!")
             return None
         
         # If the response starts with the input text, remove it
@@ -181,7 +210,7 @@ Text to translate:
                         break
         
         # Remove the target language label if present at the start
-        for prefix in [f"{target_lang}:", f"{target_lang} translation:", f"{lang_code}:"]:
+        for prefix in [f"{lang_name}:", f"{lang_name} translation:", f"{lang_code}:"]:
             if translated_text.lower().startswith(prefix.lower()):
                 translated_text = translated_text[len(prefix):].strip()
                 break
