@@ -192,9 +192,7 @@ def _translate_with_fallback(text: str, target_lang: str = "French") -> str:
     Translate using AWS Bedrock gpt-oss-120b model.
     Returns the translated text or raises an exception on failure.
     """
-    import sys
-
-    
+    import sys    
     # Try AWS Bedrock
     print(f"=== AWS TRANSLATION DEBUG ===", flush=True)
     print(f"Translating to {target_lang}...", flush=True)
